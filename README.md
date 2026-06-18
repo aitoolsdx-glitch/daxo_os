@@ -32,6 +32,10 @@ To run this OS in a QEMU emulator, make sure you have Rust Nightly installed, th
 
 cargo run -Zjson-target-spec
 
-## What I Learned
+## 🧠 The Story Behind Daxo OS
 
-This project was a challenge against complex linker errors (rust-lld) and raw memory safety bugs. It proved to me that real software engineering begins where step-by-step tutorials end.
+This project wasn't just about following standard guides; it was a 100-hour focused development sprint balanced alongside high-intensity sports training and school. 
+
+The real engineering began when step-by-step tutorials broke due to Rust Nightly updates, throwing complex linker errors (rust-lld: undefined symbol: memcpy) and Triple Faults. To solve this, I had to bypass high-level abstractions, dive deep into Cargo configuration flags, and manually manage core memory builtins.
+
+To push the system further, I built an isolated PIO ATA hard drive driver from scratch to read disk sectors via raw I/O ports before hardware interrupts were even configured. Seeing the "Data read from LBA 0" log light up in QEMU proved that real software engineering starts exactly where the instructions end.
