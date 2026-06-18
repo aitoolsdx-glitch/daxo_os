@@ -11,6 +11,7 @@ A custom, independent x86_64 multitasking microkernel written in Rust from scrat
 ## 🚀 How to Run
 To run this OS in a QEMU emulator, make sure you have Rust Nightly installed, then clone the repository and execute:
 
-cargo run -Zjson-target-spec
+    cargo run -Zjson-target-spec
+
 ## 🧠 What I Learned
 This project was a challenge against complex linker errors (rust-lld) and raw memory safety bugs. It proved to me that real software engineering begins where step-by-step tutorials end.
