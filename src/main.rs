@@ -12,11 +12,11 @@ use bootloader::{BootInfo, entry_point};
 use x86_64::VirtAddr;
 use alloc::vec;
 
-// Импортируем структуры для асинхронности
+// Importing structures for asynchronous operation
 use daxo_os::task::{Task, keyboard};
 use daxo_os::task::executor::Executor;
 
-// ИСПРАВЛЕНО: Добавлены структуры и трейты для маппинга пользовательской страницы памяти
+// structures and traits for custom memory page mapping
 use x86_64::structures::paging::{Page, Size4KiB, Mapper, FrameAllocator, PageTableFlags};
 
 entry_point!(kernel_main);
@@ -31,7 +31,7 @@ async fn example_task() {
 }
 
 fn kernel_main(boot_info: &'static BootInfo) -> ! {
-    // 1. Сначала выводим баннер (работает через VGA, прерывания не нужны)
+    // 1. First, we display the banner
     println!("     ######      ###    ##     ##  #######     #######   ######  ");
     println!("     ##   ##    ## ##    ##   ##  ##     ##   ##     ## ##    ## ");
     println!("     ##    ##  ##   ##    ## ##   ##     ##   ##     ## ##       ");
@@ -42,7 +42,7 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
     
     println!("\n[Daxo OS Multitasking Kernel Booted]");
 
-    // 2. Настраиваем маппер памяти и кучу (прерывания всё ещё выключены)
+    // 2. Setting up a memory mapper and heap
     let phys_mem_offset = VirtAddr::new(boot_info.physical_memory_offset);
     let mut mapper = unsafe { daxo_os::memory::init(phys_mem_offset) };
     let mut frame_allocator = unsafe {
@@ -52,36 +52,36 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
     daxo_os::allocator::init_heap(&mut mapper, &mut frame_allocator)
         .expect("heap initialization failed");
 
-    // --- ИСПРАВЛЕНО: НАСТРОЙКА ИЗОЛИРОВАННОЙ ПОЛЬЗОВАТЕЛЬСКОЙ СТРАНИЦЫ ---
-    // Выбираем произвольный виртуальный адрес для нашей user-space программы
+    // --- Setting up an isolated custom page ---
+    // select an arbitrary virtual address for our program.
     let user_test_page = Page::<Size4KiB>::containing_address(VirtAddr::new(0x0000_1000_0000_0000));
 
-    // Выделяем под неё физический фрейм
+    // We allocate a physical frame for it.
     let user_frame = frame_allocator.allocate_frame()
         .expect("no frames available for user test page");
 
-    // Флаги: ОБЯЗАТЕЛЬНО добавляем USER_ACCESSIBLE
+    // add USER_ACCESSIBLE :
     let user_flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE;
 
-    // Маппим страницу
+    // mape page
     unsafe {
         mapper.map_to(user_test_page, user_frame, user_flags, &mut frame_allocator)
             .expect("failed to map user test page")
             .flush();
     }
 
-    // Записываем в эту страницу бинарный код бесконечного цикла
-    // В ассемблере x86_64 команда jmp $ (прыжок на самого себя) кодируется двумя байтами: 0xEB, 0xFE
+    // We write the binary code of an infinite loop into this page
+    // In x86_64 assembler, the jmp $ command is encoded with two bytes: 0xEB, 0xFE
     unsafe {
         let user_code_ptr = user_test_page.start_address().as_mut_ptr::<u8>();
         user_code_ptr.write(0xEB);        // jmp
-        user_code_ptr.add(1).write(0xFE); // на самого себя (-2 байта)
+        user_code_ptr.add(1).write(0xFE); // to itself (-2 bytes)
     }
 
     println!("[Memory] User page mapped successfully at 0x0000_1000_0000_0000!");
     // ---------------------------------------------------------------------------------
 
-    // 3. --- ТЕСТ АТА ДРАЙВЕРА В ПОЛНОЙ ИЗОЛЯЦИИ ---
+    // 3 --- ATA driver test ---
     println!("[Testing ATA Drive Driver...]");
     
     let mut disk_vec = vec![0u8; 512];
@@ -104,27 +104,27 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
     }
     // ---------------------------------------------------------------------------------
 
-    // 4. Инициализируем IDT, GDT и контроллер прерываний PIC
+    // 4. Initializing the IDT, GDT, and PIC interrupt controller
     daxo_os::init(); 
 
-    // Инициализируем системные вызовы!
+    // Initializing system calls.
     daxo_os::syscall::init();
 
     #[cfg(test)]
     test_main();
 
-    // 5. Создаем планировщик задач
+    // 5. Create a task scheduler
     let mut executor = Executor::new();
     executor.spawn(Task::new(example_task()));
     executor.spawn(Task::new(keyboard::print_keypresses()));
     
-    // 6. Разрешаем процессору принимать прерывания
+    // 6. Allow the processor to receive interrupts
     x86_64::instructions::interrupts::enable();
 
-    // 7. Переключаемся в пространство пользователя (Ring 3)
+    // 7. Switching to user space (ring 3)
     println!("Preparing transition to Ring 3...");
     
-    // ИСПРАВЛЕНО: Вызываем контролируемый прыжок в изолированную user-space память
+    // Invoking a controlled jump into isolated user-space memory
     unsafe {
         let user_entry_fn: fn() -> ! = core::mem::transmute(user_test_page.start_address().as_mut_ptr::<u8>());
         daxo_os::gdt::jump_to_user_space(user_entry_fn);
@@ -144,22 +144,22 @@ fn panic(info: &PanicInfo) -> ! {
     daxo_os::test_panic_handler(info)
 }
 
-// Оставляем старую функцию ниже на случай, если позже захотим вернуться к тестированию сисколлов
+// We'll leave the old function below in case we want to return to syscall testing later.
 fn first_user_program() -> ! {
-    // МЫ В RING 3. Прямой доступ к daxo_os::print! ЗАПРЕЩЕН и вызовет крэш.
-    // Вместо этого мы используем инструкцию syscall!
+    // We are in Ring 3.
+    // we use the syscall instruction :
     loop {
         unsafe {
             core::arch::asm!(
-                "mov rax, 1", // Помещаем в RAX номер сисколла (1 = печать точки)
-                "syscall",    // Просим ядро сделать это за нас
-                out("rax") _, // Сообщаем компилятору, что RAX изменится
-                out("rcx") _, // RCX затрется процессором (сюда сохранится RIP)
-                out("r11") _  // R11 затрется процессором (сюда сохранится RFLAGS)
+                "mov rax, 1", // We put the syscall number in RAX
+                "syscall",    // We ask the kernel to do this for us.
+                out("rax") _, // We tell the compiler that RAX will change.
+                out("rcx") _, // RCX will be erased by the processor
+                out("r11") _  // R11 will be erased by the processor
             );
         }
 
-        // Задержка
+        // Delay.
         for _ in 0..1_000_000 {}
     }
 }
